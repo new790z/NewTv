@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewTv Ultimate - Premium</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    
+    <!-- ENGINE MULTI-CODEC (WebAssembly Fallback para H.265/HEVC e codecs pesados) -->
+    <script src="https://cdn.jsdelivr.net/npm/ogv@1.8.9/dist/ogv.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #080b11; user-select: none; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #080b11; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+        .profile-card:hover .avatar-box, .add-profile-btn:hover .icon-box { border-color: #e50914; transform: scale(1.05); }
+    </style>
+</head>
+<body class="text-slate-100 antialiased overflow-hidden bg-[#080b11]">
+
+    <!-- 1. TELA DE GERENCIAMENTO DE LISTAS (PAINEL INICIAL) -->
+    <div id="lists-manager-screen" class="flex flex-col items-center justify-center min-h-screen p-4 z-50 relative overflow-y-auto">
+        <div class="text-center mb-8">
+            <h2 class="text-4xl font-black bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">NEWTV</h2>
+            <p class="text-slate-400 text-xs mt-1 font-medium">Selecione ou adicione uma lista de reprodução</p>
+        </div>
+
+        <div id="lists-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl mb-8"></div>
+
+        <button onclick="openAddListModal()" class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold text-xs transition shadow-lg shadow-red-600/20 flex items-center space-x-2">
+            <span>+ Adicionar Nova Lista</span>
+        </button>
+    </div>
+
+    <!-- MODAL DE ADICIONAR LISTA -->
+    <div id="add-list-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0f141c] p-6 rounded-2xl border border-slate-800/80 shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold text-white mb-4">Adicionar Nova Lista</h3>
+            <div class="space-y-4">
+                <input id="list-name" type="text" placeholder="Nome da Lista (ex: Sala, Filmes do Pai...)" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                <input id="dns" type="text" placeholder="URL do Servidor (ex: http://link.com:80)" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                <input id="username" type="text" placeholder="Usuário" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                <input id="password" type="password" placeholder="Senha" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                <select id="cors-engine" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-slate-300 focus:outline-none focus:border-red-500">
+                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente</option>
+                    <option value="direct">Nenhum (Conexão Direta)</option>
+                </select>
+                <div class="flex space-x-3 pt-2">
+                    <button onclick="closeAddListModal()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-3 rounded-xl text-xs font-bold transition">Cancelar</button>
+                    <button onclick="saveNewList()" class="w-1/2 bg-red-600 hover:bg-red-700 p-3 rounded-xl font-bold text-xs transition">Conectar e Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. TELA DE SELEÇÃO DE PERFIS -->
+    <div id="profile-screen" class="hidden fixed inset-0 bg-[#080b11] z-50 flex flex-col items-center justify-center p-4">
+        <h2 class="text-3xl md:text-4xl font-semibold tracking-wide text-white mb-2">Quem está assistindo?</h2>
+        <p id="list-indicator" class="text-xs text-slate-500 font-mono tracking-wider mb-10 uppercase bg-slate-900 px-3 py-1 rounded-full border border-slate-800/60"></p>
+        
+        <div class="flex flex-wrap justify-center items-start gap-6 md:gap-8 max-w-5xl">
+            <div id="profiles-container" class="flex flex-wrap justify-center gap-6 md:gap-8"></div>
+            <div onclick="openAddProfileModal()" class="add-profile-btn flex flex-col items-center cursor-pointer text-center w-24 md:w-28 mt-2">
+                <div class="icon-box w-20 h-20 md:w-24 md:h-24 rounded-xl border-4 border-dashed border-slate-800 hover:bg-slate-900/40 flex items-center justify-center transition-all duration-200 shadow-lg">
+                    <span class="text-4xl text-slate-600 font-light">+</span>
+                </div>
+                <span class="mt-3 text-sm font-medium text-slate-500">Adicionar</span>
+            </div>
+        </div>
+        <button onclick="backToListsManager()" class="mt-16 text-xs font-semibold text-slate-500 hover:text-slate-300 border border-slate-800 hover:border-slate-600 px-4 py-2 rounded-xl transition">Voltar para as Listas</button>
+    </div>
+
+    <!-- MODAL POPUP: CRIAÇÃO DE PERFIL -->
+    <div id="add-profile-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0f141c] border border-slate-800 p-6 rounded-2xl w-full max-w-lg shadow-2xl">
+            <h3 class="text-xl font-bold text-white mb-2">Criar Novo Perfil</h3>
+            <div class="space-y-5">
+                <div>
+                    <label class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-1.5">Nome do Perfil</label>
+                    <input id="new-profile-name" type="text" maxlength="15" placeholder="Ex: Sala, Quarto..." class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block mb-2">Escolha seu Bonequinho</label>
+                    <div id="avatar-grid" class="grid grid-cols-4 gap-3"></div>
+                </div>
+                <div class="flex space-x-3 pt-4">
+                    <button onclick="closeAddProfileModal()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-3 rounded-xl text-xs font-bold transition">Cancelar</button>
+                    <button onclick="saveNewProfile()" class="w-1/2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-xl text-xs font-bold transition shadow-lg shadow-red-600/20">Criar Perfil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. APLICATIVO PRINCIPAL -->
+    <div id="main-app" class="hidden h-screen flex flex-col">
+        <header class="bg-[#0f141c] h-16 px-6 flex justify-between items-center border-b border-slate-800/60 shrink-0">
+            <div class="flex items-center space-x-6">
+                <h1 class="text-xl font-black tracking-wider text-red-600 cursor-pointer" onclick="backToProfiles()">NEWTV</h1>
+                <nav class="bg-[#080b11] p-1 rounded-xl border border-slate-800/80 flex space-x-1">
+                    <button onclick="switchTab('live')" id="btn-live" class="px-5 py-1.5 rounded-lg text-xs font-bold transition-all bg-red-600 text-white">📺 CANAIS</button>
+                    <button onclick="switchTab('vod')" id="btn-vod" class="px-5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white">🎬 FILMES</button>
+                    <button onclick="switchTab('series')" id="btn-series" class="px-5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white">🍿 SÉRIES</button>
+                </nav>
+            </div>
+            <div class="flex items-center space-x-4">
+                <input id="search-input" oninput="searchContent()" type="text" placeholder="Buscar na pasta..." class="bg-[#161d28] border border-slate-800 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-red-500 w-48 transition-all">
+                <button onclick="toggleSettingsModal()" class="bg-[#161d28] border border-slate-800 p-2 rounded-lg text-xs">⚙️</button>
+                <div onclick="backToProfiles()" class="flex items-center space-x-2 cursor-pointer group pl-2 border-l border-slate-800">
+                    <div id="nav-profile-avatar-box" class="w-8 h-8 rounded-md overflow-hidden bg-slate-800 border border-transparent p-1"></div>
+                    <span id="nav-profile-name" class="text-xs font-bold text-slate-300 hidden sm:inline">Perfil</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            <aside class="w-64 bg-[#0b0f16] border-r border-slate-800/40 overflow-y-auto p-4 shrink-0">
+                <div id="history-section" class="hidden mb-4">
+                    <span id="history-title-label" class="text-[10px] font-bold text-red-500 uppercase tracking-widest block px-2 mb-1">⏰ Recentes</span>
+                    <ul id="history-data-list" class="space-y-[2px]"></ul>
+                    <hr class="border-slate-800/40 my-3">
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block px-2 mb-2">Pastas</span>
+                <ul id="categories-list" class="space-y-[2px]"></ul>
+            </aside>
+            <main class="flex-1 p-6 overflow-y-auto bg-[#080b11]">
+                <div id="content-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-4"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 4. VIEWPORT DE CINEMA -->
+    <div id="cinema-container" class="hidden fixed inset-0 bg-[#080b11]/98 backdrop-blur-md z-50 flex flex-col md:flex-row overflow-hidden">
+        <div class="flex-1 bg-black flex items-center justify-center relative">
+            <button onclick="closeCinema()" class="absolute top-4 left-4 bg-slate-900/80 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold z-50 border border-slate-700">← Voltar (Esc)</button>
+            
+            <div id="resume-prompt" class="hidden absolute inset-0 bg-black/95 z-40 flex flex-col items-center justify-center p-6 text-center">
+                <h3 class="text-xl font-bold mb-2 text-white">Deseja continuar assistindo?</h3>
+                <div class="flex space-x-4 mt-4">
+                    <button id="btn-resume-yes" class="bg-red-600 hover:bg-red-700 px-6 py-2.5 rounded-xl font-bold text-xs transition">Continuar de onde parou</button>
+                    <button id="btn-resume-no" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-6 py-2.5 rounded-xl font-bold text-xs transition">Recomeçar do Início</button>
+                </div>
+            </div>
+
+            <!-- PLAYER ELEMENT CONTAINER -->
+            <div id="wrapper-do-player" class="w-full h-full max-h-screen aspect-video flex items-center justify-center">
+                 <video id="video-player" class="video-js vjs-default-skin w-full h-full" controls preload="auto"></video>
+            </div>
+        </div>
+
+        <div class="w-full md:w-[420px] bg-[#0f141c] border-t md:border-t-0 md:border-l border-slate-800 flex flex-col p-6 overflow-y-auto">
+            <div class="mb-4">
+                <span id="cinema-media-type" class="text-[10px] bg-red-600/20 text-red-500 font-bold px-2 py-0.5 rounded uppercase tracking-wider">Mídia</span>
+                <h2 id="cinema-title" class="text-xl font-black text-white mt-1">Título do Conteúdo</h2>
+            </div>
+            <div id="cinema-dynamic-content" class="flex-1 space-y-4"></div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIGURAÇÕES -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-[#0f141c] border border-slate-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-base font-bold text-white">⚙️ Ajustes do Perfil</h3>
+                <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
+            </div>
+            <div class="space-y-3">
+                <button onclick="clearProfileData('history')" class="w-full bg-[#161d28] hover:bg-red-950/20 border border-slate-800 p-3 rounded-xl text-left text-xs text-slate-300">Limpar Recentes</button>
+                <button onclick="clearProfileData('progress')" class="w-full bg-[#161d28] hover:bg-red-950/20 border border-slate-800 p-3 rounded-xl text-left text-xs text-slate-300">Resetar Progresso</button>
+                <button onclick="backToProfiles()" class="w-full bg-red-600 hover:bg-red-700 p-3 rounded-xl text-center text-xs font-bold text-white">👥 Alternar Perfil</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let listsCollection = [];
+        let currentList = null;   
+        let currentTab = 'live';
+        let categories = [];
+        let cachedStreams = null;
+        let displayedItems = [];
+        let player = null;
+        let currentMediaId = null;
+        let currentProfileId = null;
+        let selectedAvatarId = 0;
+        let profilesList = [];
+
+        const bonequinhosAvatars = [
+            { id: 0, bg: '#1e3a8a', svg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" fill="#60a5fa"/><path d="M20 19C20 16.2386 16.4183 14 12 14C7.58172 14 4 16.2386 4 19" stroke="#60a5fa" stroke-width="2"/></svg>` },
+            { id: 1, bg: '#701a75', svg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" fill="#f472b6"/><path d="M20 19C20 16.2386 16.4183 14 12 14C7.58172 14 4 16.2386 4 19" stroke="#f472b6" stroke-width="2"/></svg>` },
+            { id: 2, bg: '#14532d', svg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" fill="#4ade80"/><path d="M20 19C20 16.2386 16.4183 14 12 14C7.58172 14 4 16.2386 4 19" stroke="#4ade80" stroke-width="2"/></svg>` },
+            { id: 3, bg: '#7c2d12', svg: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" fill="#fb923c"/><path d="M20 19C20 16.2386 16.4183 14 12 14C7.58172 14 4 16.2386 4 19" stroke="#fb923c" stroke-width="2"/></svg>` }
+        ];
+
+        let profileStorage = { live_history: [], vod_history: [], series_history: [], progress: {} };
+
+        function getMediaEngineConfig(url, extension) {
+            const ext = extension.toLowerCase();
+            const testVideo = document.createElement('video');
+            
+            let type = 'video/mp4';
+            if (ext === 'm3u8') return { type: 'application/x-mpegURL', useFallback: false };
+            if (ext === 'mkv') type = 'video/x-matroska';
+            
+            let canPlay = testVideo.canPlayType(type);
+            if(ext === 'mp4' || ext === 'mkv') {
+                const hevcTest = testVideo.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"');
+                if (hevcTest === 'probably' || hevcTest === 'maybe') {
+                    return { type: 'video/mp4; codecs="hvc1.1.6.L93.B0"', useFallback: false };
+                }
+                if (canPlay === '' || canPlay === 'no') {
+                    return { type: 'video/ogg', useFallback: true }; 
+                }
+            }
+            return { type: type, useFallback: false };
+        }
+
+        function renderListsManager() {
+            document.getElementById('profile-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('lists-manager-screen').classList.remove('hidden');
+            listsCollection = JSON.parse(localStorage.getItem('sm_lists_collection')) || [];
+            const grid = document.getElementById('lists-grid'); grid.innerHTML = '';
+            if(listsCollection.length === 0) { grid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 text-sm">Nenhuma lista adicionada.</div>`; return; }
+            listsCollection.forEach(list => {
+                const item = document.createElement('div');
+                item.className = "bg-[#0f141c] border border-slate-800/80 p-4 rounded-xl flex justify-between items-center hover:border-red-500/60 transition cursor-pointer group";
+                item.innerHTML = `<div onclick="selectList('${list.id}')" class="flex-1 min-w-0 pr-4"><h4 class="text-white font-bold text-sm truncate group-hover:text-red-500">${list.name}</h4><p class="text-slate-500 text-[11px] truncate font-mono">${list.dns}</p></div><button onclick="removeList(event, '${list.id}', '${list.name}')" class="text-slate-500 hover:text-red-500 text-xs p-2 font-bold">✕</button>`;
+                grid.appendChild(item);
+            });
+        }
+
+        function openAddListModal() { document.getElementById('add-list-modal').classList.remove('hidden'); }
+        function closeAddListModal() { document.getElementById('add-list-modal').classList.add('hidden'); }
+        
+        async function saveNewList() {
+            const name = document.getElementById('list-name').value.trim();
+            const dns = document.getElementById('dns').value.replace(/\/$/, "").trim();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            const engine = document.getElementById('cors-engine').value;
+            if(!name || !dns || !user || !pass) return alert('Preencha tudo');
+            try {
+                const testUrl = `${dns}/player_api.php?username=${user}&password=${pass}`;
+                let res;
+                if (engine === 'smart') {
+                    try { res = await (await fetch(testUrl)).json(); } catch(e) { res = await (await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(testUrl)}`)).json(); }
+                } else { res = await (await fetch(testUrl)).json(); }
+                if (res && res.user_info && res.user_info.auth === 1) {
+                    listsCollection.push({ id: 'l_' + Date.now(), name, dns, user, pass, engine });
+                    localStorage.setItem('sm_lists_collection', JSON.stringify(listsCollection));
+                    closeAddListModal(); renderListsManager();
+                } else { alert('Acesso negado'); }
+            } catch(e) { alert('Erro de conexão'); }
+        }
+
+        function removeList(event, id, name) {
+            event.stopPropagation();
+            if(confirm(`Excluir lista "${name}"?`)) {
+                listsCollection = listsCollection.filter(l => l.id !== id);
+                localStorage.setItem('sm_lists_collection', JSON.stringify(listsCollection));
+                renderListsManager();
+            }
+        }
+
+        function selectList(id) {
+            currentList = listsCollection.find(l => l.id === id);
+            document.getElementById('lists-manager-screen').classList.add('hidden');
+            profilesList = JSON.parse(localStorage.getItem(`list_${currentList.id}_profiles`)) || [{ id: 1, name: 'Principal', avatarId: 0 }];
+            showProfileSelection();
+        }
+
+        function backToListsManager() { document.getElementById('profile-screen').classList.add('hidden'); renderListsManager(); }
+
+        function showProfileSelection() {
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('profile-screen').classList.remove('hidden');
+            document.getElementById('list-indicator').innerText = `Lista: ${currentList.name}`;
+            const container = document.getElementById('profiles-container'); container.innerHTML = '';
+            profilesList.forEach(p => {
+                const av = bonequinhosAvatars.find(a => a.id === p.avatarId) || bonequinhosAvatars[0];
+                const card = document.createElement('div');
+                card.className = "relative group flex flex-col items-center w-24 md:w-28";
+                card.innerHTML = `<button onclick="removeProfile(event, ${p.id}, '${p.name}')" class="absolute -top-1 -right-1 z-10 bg-red-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">✕</button><div onclick="selectProfile(${p.id})" class="profile-card cursor-pointer text-center w-full"><div class="avatar-box w-20 h-20 md:w-24 md:h-24 mx-auto rounded-xl border-4 border-slate-800 flex items-center justify-center p-2" style="background-color: ${av.bg}">${av.svg}</div><span class="mt-3 text-sm font-medium text-slate-400 block truncate">${p.name}</span></div>`;
+                container.appendChild(card);
+            });
+        }
+
+        function removeProfile(event, id, name) {
+            event.stopPropagation();
+            if (confirm(`Remover perfil "${name}"?`)) {
+                profilesList = profilesList.filter(p => p.id !== id);
+                localStorage.setItem(`list_${currentList.id}_profiles`, JSON.stringify(profilesList));
+                showProfileSelection();
+            }
+        }
+
+        function openAddProfileModal() {
+            document.getElementById('new-profile-name').value = '';
+            const grid = document.getElementById('avatar-grid'); grid.innerHTML = '';
+            bonequinhosAvatars.forEach((av, idx) => {
+                const div = document.createElement('div');
+                div.className = `avatar-opt border-4 border-slate-800 rounded-xl p-2 cursor-pointer aspect-square ${idx===0?'border-red-600':''}`;
+                div.style.backgroundColor = av.bg; div.innerHTML = av.svg;
+                div.onclick = () => { document.querySelectorAll('.avatar-opt').forEach(el=>el.classList.remove('border-red-600')); div.classList.add('border-red-600'); selectedAvatarId = av.id; };
+                grid.appendChild(div);
+            });
+            document.getElementById('add-profile-modal').classList.remove('hidden');
+        }
+
+        function closeAddProfileModal() { document.getElementById('add-profile-modal').classList.add('hidden'); }
+        function saveNewProfile() {
+            const name = document.getElementById('new-profile-name').value.trim();
+            if(!name) return;
+            profilesList.push({ id: Date.now(), name, avatarId: selectedAvatarId });
+            localStorage.setItem(`list_${currentList.id}_profiles`, JSON.stringify(profilesList));
+            closeAddProfileModal(); showProfileSelection();
+        }
+
+        function selectProfile(id) {
+            currentProfileId = id;
+            const prof = profilesList.find(p => p.id === id);
+            const av = bonequinhosAvatars.find(a => a.id === prof.avatarId) || bonequinhosAvatars[0];
+            profileStorage.live_history = JSON.parse(localStorage.getItem(`list_${currentList.id}_p_${id}_live_history`)) || [];
+            profileStorage.vod_history = JSON.parse(localStorage.getItem(`list_${currentList.id}_p_${id}_vod_history`)) || [];
+            profileStorage.series_history = JSON.parse(localStorage.getItem(`list_${currentList.id}_p_${id}_series_history`)) || [];
+            profileStorage.progress = JSON.parse(localStorage.getItem(`list_${currentList.id}_p_${id}_progress`)) || {};
+            const navBox = document.getElementById('nav-profile-avatar-box');
+            navBox.style.backgroundColor = av.bg; navBox.innerHTML = av.svg;
+            document.getElementById('nav-profile-name').innerText = prof.name;
+            document.getElementById('profile-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            switchTab('live');
+        }
+
+        function backToProfiles() { document.getElementById('settings-modal').classList.add('hidden'); closeCinema(); showProfileSelection(); }
+        function saveProfileStorage() {
+            localStorage.setItem(`list_${currentList.id}_p_${currentProfileId}_live_history`, JSON.stringify(profileStorage.live_history));
+            localStorage.setItem(`list_${currentList.id}_p_${currentProfileId}_vod_history`, JSON.stringify(profileStorage.vod_history));
+            localStorage.setItem(`list_${currentList.id}_p_${currentProfileId}_series_history`, JSON.stringify(profileStorage.series_history));
+            localStorage.setItem(`list_${currentList.id}_p_${currentProfileId}_progress`, JSON.stringify(profileStorage.progress));
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            initMainPlayer();
+            renderListsManager();
+        });
+
+        function initMainPlayer() {
+            if(player) { player.dispose(); }
+            document.getElementById('wrapper-do-player').innerHTML = `<video id="video-player" class="video-js vjs-default-skin w-full h-full" controls preload="auto"></video>`;
+            player = videojs('video-player', { fluid: false, fill: true, html5: { vhs: { overrideNative: true } } });
+            player.on('timeupdate', () => {
+                if (currentMediaId && (currentTab === 'vod' || currentTab === 'series')) {
+                    const cur = player.currentTime(); const dur = player.duration();
+                    if (cur > 5 && dur > 0) {
+                        profileStorage.progress[currentMediaId] = { time: cur, percent: Math.floor((cur / dur) * 100) };
+                        saveProfileStorage();
+                    }
+                }
+            });
+        }
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
+        });
+
+        async function fetchUnblocked(url) {
+            if (currentList.engine === 'smart') {
+                try { return await (await fetch(url)).json(); } catch (err) { return await (await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`)).json(); }
+            }
+            return await (await fetch(url)).json();
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            ['live', 'vod', 'series'].forEach(t => { document.getElementById(`btn-${t}`).className = t === tab ? "px-5 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white" : "px-5 py-1.5 rounded-lg text-xs font-bold text-slate-400"; });
+            cachedStreams = null; renderMediaHistory(); loadTabData();
+        }
+
+        async function loadTabData() {
+            let act = currentTab === 'live' ? 'get_live_categories' : currentTab === 'vod' ? 'get_vod_categories' : 'get_series_categories';
+            try {
+                const data = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}`);
+                categories = [{ category_id: "all_content", category_name: "✨ TODOS OS CONTEÚDOS" }].concat(data || []);
+                renderCategories();
+            } catch (e) {}
+        }
+
+        function renderCategories() {
+            const list = document.getElementById('categories-list'); list.innerHTML = '';
+            categories.forEach(cat => {
+                const li = document.createElement('li'); li.id = `cat-${cat.category_id}`;
+                li.innerHTML = `<button onclick="selectCategory('${cat.category_id}')" class="w-full text-left px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-900 text-xs font-medium truncate">${cat.category_name}</button>`;
+                list.appendChild(li);
+            });
+        }
+
+        async function selectCategory(id) {
+            document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 animate-pulse text-xs">Carregando...</div>';
+            let act = currentTab === 'live' ? 'get_live_streams' : currentTab === 'vod' ? 'get_vod_streams' : 'get_series';
+            if (id === "all_content") {
+                if (!cachedStreams) cachedStreams = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}`) || [];
+                displayedItems = cachedStreams;
+            } else {
+                displayedItems = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}&category_id=${id}`) || [];
+            }
+            executeRender(displayedItems);
+        }
+
+        function executeRender(items) {
+            const grid = document.getElementById('content-grid'); grid.innerHTML = '';
+            if(!items || items.length === 0) { grid.innerHTML = '<div class="col-span-full text-center py-20 text-slate-600 text-xs">Vazio ou não encontrado.</div>'; return; }
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "group bg-[#0f141c] border border-slate-800/60 rounded-xl p-2 cursor-pointer hover:border-red-500/40 transition-all overflow-hidden relative";
+                const name = item.name || "Sem título";
+                const img = item.stream_icon || item.cover || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=300';
+                const id = item.stream_id || item.series_id;
+                let key = `${currentTab}_${id}`;
+                let progHtml = '';
+                if (currentTab === 'vod' && profileStorage.progress[key]) {
+                    progHtml = `<div class="absolute bottom-0 left-0 right-0 h-[3px] bg-slate-800"><div class="h-full bg-red-600" style="width: ${profileStorage.progress[key].percent}%"></div></div>`;
+                }
+                card.innerHTML = `<div class="aspect-[2/3] w-full bg-[#080b11] rounded-lg overflow-hidden mb-2"><img src="${img}" class="w-full h-full object-cover" loading="lazy"></div><p class="text-[11px] font-semibold truncate text-slate-300 text-center">${name}</p>${progHtml}`;
+                card.onclick = () => openCinema(item);
+                grid.appendChild(card);
+            });
+        }
+
+        function searchContent() {
+            const term = document.getElementById('search-input').value.toLowerCase();
+            executeRender(displayedItems.filter(item => (item.name || "").toLowerCase().includes(term)));
+        }
+
+        function addToHistory(item) {
+            let target = currentTab === 'live' ? 'live_history' : currentTab === 'vod' ? 'vod_history' : 'series_history';
+            let key = currentTab === 'series' ? 'series_id' : 'stream_id';
+            profileStorage[target] = profileStorage[target].filter(x => x[key] !== item[key]);
+            profileStorage[target].unshift(item);
+            if(profileStorage[target].length > 10) profileStorage[target].pop();
+            saveProfileStorage(); renderMediaHistory();
+        }
+
+        function renderMediaHistory() {
+            const section = document.getElementById('history-section');
+            const list = document.getElementById('history-data-list');
+            let target = currentTab === 'live' ? 'live_history' : currentTab === 'vod' ? 'vod_history' : 'series_history';
+            const hist = profileStorage[target] || [];
+            if(hist.length === 0) { section.classList.add('hidden'); return; }
+            section.classList.remove('hidden'); list.innerHTML = '';
+            hist.forEach(item => {
+                const li = document.createElement('li');
+                li.className = "p-1 text-xs text-slate-400 hover:text-white cursor-pointer truncate";
+                li.innerText = `🍿 ${item.name}`;
+                li.onclick = () => openCinema(item);
+                list.appendChild(li);
+            });
+        }
+
+        async function openCinema(item) {
+            document.getElementById('cinema-container').classList.remove('hidden');
+            document.getElementById('cinema-title').innerText = item.name || "Conteúdo";
+            document.getElementById('resume-prompt').classList.add('hidden');
+            const dynamicBox = document.getElementById('cinema-dynamic-content');
+            addToHistory(item);
+
+            if (currentTab === 'live') {
+                const id = item.stream_id; currentMediaId = null;
+                document.getElementById('cinema-media-type').innerText = "CANAL AO VIVO";
+                let url = `${currentList.dns}/live/${currentList.user}/${currentList.pass}/${id}.m3u8`;
+                playStreamUniversal(url, 'm3u8');
+                dynamicBox.innerHTML = '<p class="text-xs text-slate-500">Transmissão ao vivo iniciada.</p>';
+            } 
+            else if (currentTab === 'vod') {
+                const id = item.stream_id; currentMediaId = `vod_${id}`;
+                document.getElementById('cinema-media-type').innerText = "FILME";
+                
+                // Exibe imediatamente o layout da sinopse (se já tiver dados em cache)
+                renderMovieInfoPanel(item.plot, item.rating, item.genre);
+
+                // Força busca detalhada para garantir a sinopse se o card principal veio incompleto
+                try {
+                    const detail = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=get_vod_info&vod_id=${id}`);
+                    if (detail && detail.info) {
+                        renderMovieInfoPanel(detail.info.plot, detail.info.rating, detail.info.genre);
+                    }
+                } catch(e) { console.log("Erro ao buscar metadados extras do filme."); }
+
+                const ext = item.container_extension || 'mp4';
+                let url = `${currentList.dns}/movie/${currentList.user}/${currentList.pass}/${id}.${ext}`;
+                handleTimeMemory(url, ext);
+            } 
+            else if (currentTab === 'series') {
+                const id = item.series_id; currentMediaId = `series_${id}`;
+                document.getElementById('cinema-media-type').innerText = "SÉRIE";
+                dynamicBox.innerHTML = '<p class="text-xs text-slate-500 animate-pulse">Buscando temporadas...</p>';
+                loadSeriesEpisodes(id);
+            }
+        }
+
+        // Função auxiliar para renderizar a caixa de sinopse estilizada
+        function renderMovieInfoPanel(plot, rating, genre) {
+            const dynamicBox = document.getElementById('cinema-dynamic-content');
+            let cleanPlot = plot || "Sinopse não disponível para este título.";
+            let cleanRating = rating ? `⭐ ${rating}` : "⭐ --";
+            let cleanGenre = genre || "Gênero Geral";
+
+            dynamicBox.innerHTML = `
+                <div class="space-y-4">
+                    <div class="flex items-center space-x-3 text-xs font-semibold">
+                        <span class="bg-amber-500/10 text-amber-500 px-2.5 py-1 rounded-md border border-amber-500/20">${cleanRating}</span>
+                        <span class="bg-slate-800 text-slate-400 px-2.5 py-1 rounded-md truncate max-w-[200px]">${cleanGenre}</span>
+                    </div>
+                    <div class="bg-[#161d28]/80 border border-slate-800/80 p-4 rounded-xl">
+                        <h4 class="text-slate-400 text-[10px] uppercase font-bold tracking-wider mb-1.5">Sinopse</h4>
+                        <p class="text-xs text-slate-300 leading-relaxed font-normal">${cleanPlot}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleTimeMemory(url, ext) {
+            const saved = profileStorage.progress[currentMediaId];
+            if (saved && saved.time > 10 && saved.percent < 95) {
+                const prompt = document.getElementById('resume-prompt'); prompt.classList.remove('hidden');
+                document.getElementById('btn-resume-yes').onclick = () => { prompt.classList.add('hidden'); playStreamUniversal(url, ext, saved.time); };
+                document.getElementById('btn-resume-no').onclick = () => { prompt.classList.add('hidden'); playStreamUniversal(url, ext, 0); };
+            } else { playStreamUniversal(url, ext, 0); }
+        }
+
+        function playStreamUniversal(url, ext, startTime = 0) {
+            const config = getMediaEngineConfig(url, ext);
+
+            if (!config.useFallback) {
+                initMainPlayer();
+                player.src({ type: config.type, src: url });
+                player.ready(() => { if(startTime > 0) player.currentTime(startTime); player.play().catch(()=>{}); });
+            } 
+            else {
+                console.log("Iniciando decodificação via software WebAssembly...");
+                const container = document.getElementById('wrapper-do-player');
+                if(player) { player.dispose(); player = null; }
+                
+                container.innerHTML = `<video id="wasm-fallback-player" class="w-full h-full object-contain" controls></video>`;
+                const wasmVideo = document.getElementById('wasm-fallback-player');
+                
+                const ogvPlayer = new OGVPlayer();
+                wasmVideo.parentNode.replaceChild(ogvPlayer, wasmVideo);
+                ogvPlayer.id = "wasm-fallback-player";
+                ogvPlayer.className = "w-full h-full bg-black";
+                
+                ogvPlayer.src = url;
+                ogvPlayer.load();
+                ogvPlayer.addEventListener('loadedmetadata', () => {
+                    if(startTime > 0) ogvPlayer.currentTime = startTime;
+                    ogvPlayer.play().catch(()=>{});
+                });
+
+                ogvPlayer.addEventListener('timeupdate', () => {
+                    if (currentMediaId && ogvPlayer.duration > 0) {
+                        profileStorage.progress[currentMediaId] = { time: ogvPlayer.currentTime, percent: Math.floor((ogvPlayer.currentTime / ogvPlayer.duration) * 100) };
+                        saveProfileStorage();
+                    }
+                });
+            }
+        }
+
+        async function loadSeriesEpisodes(seriesId) {
+            const dynamicBox = document.getElementById('cinema-dynamic-content');
+            try {
+                const data = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=get_series_info&series_id=${seriesId}`);
+                if (!data || !data.episodes) { dynamicBox.innerHTML = '<p class="text-xs">Sem episódios disponíveis.</p>'; return; }
+                
+                let plotHtml = '';
+                if(data.info && data.info.plot) {
+                    plotHtml = `<div class="bg-[#161d28]/40 border border-slate-800/40 p-3 rounded-xl mb-3 text-slate-400 text-xs">${data.info.plot}</div>`;
+                }
+
+                dynamicBox.innerHTML = `${plotHtml}<div class="space-y-3"><select id="season-selector" onchange="filterSeason()" class="w-full p-2 rounded-xl bg-[#161d28] text-xs font-bold text-slate-200 focus:outline-none"></select><div id="episodes-list-container" class="space-y-1 max-h-[40vh] overflow-y-auto"></div></div>`;
+                Object.keys(data.episodes).forEach(s => document.getElementById('season-selector').innerHTML += `<option value="${s}">Temporada ${s}</option>`);
+                window.currentSeriesEpisodes = data.episodes; filterSeason();
+            } catch (e) { dynamicBox.innerHTML = '<p class="text-xs">Erro ao processar episódios.</p>'; }
+        }
+
+        function filterSeason() {
+            const sNum = document.getElementById('season-selector').value;
+            const container = document.getElementById('episodes-list-container'); container.innerHTML = '';
+            (window.currentSeriesEpisodes[sNum] || []).forEach(ep => {
+                const epKey = `ep_${ep.id}`;
+                let prog = '';
+                if(profileStorage.progress[epKey]) prog = `<div class="w-full bg-slate-800 h-[2px] mt-1"><div class="bg-red-600 h-full" style="width: ${profileStorage.progress[epKey].percent}%"></div></div>`;
+                const div = document.createElement('div');
+                div.className = "p-3 rounded-xl bg-[#161d28]/60 hover:bg-[#161d28] text-xs text-slate-300 transition cursor-pointer mb-1 border border-slate-800/40";
+                div.innerHTML = `<div>EP ${ep.episode_num} - ${ep.title || 'Episódio'}</div>${prog}`;
+                div.onclick = () => { currentMediaId = epKey; const ext = ep.container_extension || 'mp4'; let url = `${currentList.dns}/series/${currentList.user}/${currentList.pass}/${ep.id}.${ext}`; handleTimeMemory(url, ext); };
+                container.appendChild(div);
+            });
+        }
+
+        function closeCinema() { 
+            const wasmPlayer = document.getElementById('wasm-fallback-player');
+            if(wasmPlayer && typeof wasmPlayer.pause === 'function') wasmPlayer.pause();
+            if(player) player.pause(); 
+            document.getElementById('cinema-container').classList.add('hidden'); 
+            renderMediaHistory(); 
+            if(currentTab === 'vod') executeRender(displayedItems); 
+        }
+        function toggleSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
+        function clearProfileData(target) {
+            if (target === 'history') { profileStorage.live_history = []; profileStorage.vod_history = []; profileStorage.series_history = []; }
+            else if (target === 'progress') { profileStorage.progress = {}; }
+            saveProfileStorage(); toggleSettingsModal(); renderMediaHistory(); executeRender(displayedItems);
+        }
+    </script>
+</body>
+</html>
