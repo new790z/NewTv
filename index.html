@@ -46,7 +46,7 @@
                 <input id="username" type="text" placeholder="Usuário" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <input id="password" type="password" placeholder="Senha" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <select id="cors-engine" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-slate-300 focus:outline-none focus:border-red-500">
-                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente (Online)</option>
+                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente + Proxy de Mídia</option>
                     <option value="direct">Nenhum (Usar Extensão do Navegador)</option>
                 </select>
                 <div class="flex space-x-3 pt-2">
@@ -349,7 +349,7 @@
         function initMainPlayer() {
             if(player) { player.dispose(); }
             document.getElementById('wrapper-do-player').innerHTML = `<video id="video-player" class="video-js vjs-default-skin w-full h-full" controls preload="auto"></video>`;
-            player = videojs('video-player', { fluid: false, fill: true, html5: { vhs: { overrideNative: true } } });
+            player = videojs('video-player', { fluid: false, fill: true, html5: { vhs: { overrideNative: true, allowMixedContent: true } } });
             player.on('timeupdate', () => {
                 if (currentMediaId && (currentTab === 'vod' || currentTab === 'series')) {
                     const cur = player.currentTime(); const dur = player.duration();
@@ -365,28 +365,23 @@
             if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
         });
 
-        // MECANISMO DE CORREÇÃO PARA AMBIENTE ONLINE (HTTPS -> PROXY HIBRIDO ATUALIZADO)
+        // MECANISMO MULTI-PROXY EVITA BLOQUEIOS HTTP / HTTPS
         async function fetchUnblockedWithEngine(url, engine) {
             if (engine === 'direct') {
                 const res = await fetch(url);
                 return await res.json();
             }
-            
-            // Modo Smart Dinâmico: Força o desvio do bloqueio de conteúdo misto (HTTP dentro de HTTPS)
             try {
-                // Tentativa 1: Via proxy AllOrigins transparente estruturado de forma direta
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                 const res = await fetch(proxyUrl);
-                if (!res.ok) throw new Error("Fallback para motor alternativo");
+                if (!res.ok) throw new Error("Mudar proxy");
                 return await res.json();
             } catch (err) {
-                // Tentativa 2: Via ThingProxy Gateway (Excelente para APIs JSON estruturadas de IPTV)
                 try {
                     const fallbackProxy = `https://thingproxy.freeboard.io/fetch/${url}`;
                     const res = await fetch(fallbackProxy);
                     return await res.json();
                 } catch(e) {
-                    // Tentativa 3: Codetabs como contingência final de rede
                     const finalProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
                     const res = await fetch(finalProxy);
                     return await res.json();
@@ -396,6 +391,14 @@
 
         async function fetchUnblocked(url) {
             return await fetchUnblockedWithEngine(url, currentList.engine);
+        }
+
+        // TRANSFORMA STREAMINGS EM LINKS COMPATÍVEIS COM HTTPS DINAMICAMENTE
+        function aplicarProxyNoVideo(videoUrl) {
+            if (!currentList || currentList.engine === 'direct') return videoUrl;
+            // Se o link já for HTTPS nativo, não mexe. Se for HTTP, envelopa no proxy de mídia seguro
+            if (videoUrl.startsWith('https://')) return videoUrl;
+            return `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(videoUrl)}`;
         }
 
         function switchTab(tab) {
@@ -422,7 +425,6 @@
                 li.innerHTML = `<button onclick="selectCategory('${cat.category_id}')" class="w-full text-left px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-900 text-xs font-medium truncate">${cat.category_name}</button>`;
                 list.appendChild(li);
             });
-            // Auto-seleciona a primeira categoria por padrão para evitar tela em branco
             if(categories.length > 0) selectCategory(categories[0].category_id);
         }
 
@@ -503,13 +505,12 @@
                 const id = item.stream_id; currentMediaId = null;
                 document.getElementById('cinema-media-type').innerText = "CANAL AO VIVO";
                 let url = `${currentList.dns}/live/${currentList.user}/${currentList.pass}/${id}.m3u8`;
-                playStreamUniversal(url, 'm3u8');
-                dynamicBox.innerHTML = '<p class="text-xs text-slate-500">Transmissão ao vivo iniciada.</p>';
+                playStreamUniversal(aplicarProxyNoVideo(url), 'm3u8');
+                dynamicBox.innerHTML = '<p class="text-xs text-slate-500">Transmissão ao vivo iniciada via túnel seguro.</p>';
             } 
             else if (currentTab === 'vod') {
                 const id = item.stream_id; currentMediaId = `vod_${id}`;
                 document.getElementById('cinema-media-type').innerText = "FILME";
-                
                 renderMovieInfoPanel(item.plot, item.rating, item.genre);
 
                 try {
@@ -517,11 +518,11 @@
                     if (detail && detail.info) {
                         renderMovieInfoPanel(detail.info.plot, detail.info.rating, detail.info.genre);
                     }
-                } catch(e) { console.log("Erro ao buscar metadados extras do filme."); }
+                } catch(e) {}
 
                 const ext = item.container_extension || 'mp4';
                 let url = `${currentList.dns}/movie/${currentList.user}/${currentList.pass}/${id}.${ext}`;
-                handleTimeMemory(url, ext);
+                handleTimeMemory(aplicarProxyNoVideo(url), ext);
             } 
             else if (currentTab === 'series') {
                 const id = item.series_id; currentMediaId = `series_${id}`;
@@ -569,7 +570,6 @@
                 player.ready(() => { if(startTime > 0) player.currentTime(startTime); player.play().catch(()=>{}); });
             } 
             else {
-                console.log("Iniciando decodificação via software WebAssembly...");
                 const container = document.getElementById('wrapper-do-player');
                 if(player) { player.dispose(); player = null; }
                 
@@ -624,7 +624,7 @@
                 const div = document.createElement('div');
                 div.className = "p-3 rounded-xl bg-[#161d28]/60 hover:bg-[#161d28] text-xs text-slate-300 transition cursor-pointer mb-1 border border-slate-800/40";
                 div.innerHTML = `<div>EP ${ep.episode_num} - ${ep.title || 'Episódio'}</div>${prog}`;
-                div.onclick = () => { currentMediaId = epKey; const ext = ep.container_extension || 'mp4'; let url = `${currentList.dns}/series/${currentList.user}/${currentList.pass}/${ep.id}.${ext}`; handleTimeMemory(url, ext); };
+                div.onclick = () => { currentMediaId = epKey; const ext = ep.container_extension || 'mp4'; let url = `${currentList.dns}/series/${currentList.user}/${currentList.pass}/${ep.id}.${ext}`; handleTimeMemory(aplicarProxyNoVideo(url), ext); };
                 container.appendChild(div);
             });
         }
