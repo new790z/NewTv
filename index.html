@@ -46,7 +46,7 @@
                 <input id="username" type="text" placeholder="Usuário" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <input id="password" type="password" placeholder="Senha" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <select id="cors-engine" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-slate-300 focus:outline-none focus:border-red-500">
-                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente</option>
+                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente (Online)</option>
                     <option value="direct">Nenhum (Conexão Direta)</option>
                 </select>
                 <div class="flex space-x-3 pt-2">
@@ -245,16 +245,13 @@
             if(!name || !dns || !user || !pass) return alert('Preencha tudo');
             try {
                 const testUrl = `${dns}/player_api.php?username=${user}&password=${pass}`;
-                let res;
-                if (engine === 'smart') {
-                    try { res = await (await fetch(testUrl)).json(); } catch(e) { res = await (await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(testUrl)}`)).json(); }
-                } else { res = await (await fetch(testUrl)).json(); }
+                let res = await fetchUnblockedWithEngine(testUrl, engine);
                 if (res && res.user_info && res.user_info.auth === 1) {
                     listsCollection.push({ id: 'l_' + Date.now(), name, dns, user, pass, engine });
                     localStorage.setItem('sm_lists_collection', JSON.stringify(listsCollection));
                     closeAddListModal(); renderListsManager();
-                } else { alert('Acesso negado'); }
-            } catch(e) { alert('Erro de conexão'); }
+                } else { alert('Acesso negado do Servidor.'); }
+            } catch(e) { alert('Erro de conexão ou trava de CORS ativa.'); }
         }
 
         function removeList(event, id, name) {
@@ -368,11 +365,31 @@
             if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
         });
 
-        async function fetchUnblocked(url) {
-            if (currentList.engine === 'smart') {
-                try { return await (await fetch(url)).json(); } catch (err) { return await (await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`)).json(); }
+        // CENTRAL DE DESBLOQUEIO CORS INTELIGENTE PARA AMBIENTE ONLINE (HTTPS)
+        async function fetchUnblockedWithEngine(url, engine) {
+            if (engine === 'direct') {
+                return await (await fetch(url)).json();
             }
-            return await (await fetch(url)).json();
+            // Modo Smart: Otimizado para ignorar travas de protocolo e CORS misto
+            try {
+                const res = await fetch(url);
+                return await res.json();
+            } catch (err) {
+                // Fallback 1: Codetabs Proxy API (Mais rápido para JSONs puros em ambiente seguro)
+                try {
+                    const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+                    return await (await fetch(proxyUrl)).json();
+                } catch(e) {
+                    // Fallback 2: AllOrigins estruturado como string pura para contingência final
+                    const backupUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const strRes = await (await fetch(backupUrl)).text();
+                    return JSON.parse(strRes);
+                }
+            }
+        }
+
+        async function fetchUnblocked(url) {
+            return await fetchUnblockedWithEngine(url, currentList.engine);
         }
 
         function switchTab(tab) {
@@ -479,10 +496,8 @@
                 const id = item.stream_id; currentMediaId = `vod_${id}`;
                 document.getElementById('cinema-media-type').innerText = "FILME";
                 
-                // Exibe imediatamente o layout da sinopse (se já tiver dados em cache)
                 renderMovieInfoPanel(item.plot, item.rating, item.genre);
 
-                // Força busca detalhada para garantir a sinopse se o card principal veio incompleto
                 try {
                     const detail = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=get_vod_info&vod_id=${id}`);
                     if (detail && detail.info) {
@@ -502,7 +517,6 @@
             }
         }
 
-        // Função auxiliar para renderizar a caixa de sinopse estilizada
         function renderMovieInfoPanel(plot, rating, genre) {
             const dynamicBox = document.getElementById('cinema-dynamic-content');
             let cleanPlot = plot || "Sinopse não disponível para este título.";
