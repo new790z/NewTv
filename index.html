@@ -9,7 +9,7 @@
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     
-    <!-- ENGINE MULTI-CODEC (WebAssembly Fallback para H.265/HEVC e codecs pesados) -->
+    <!-- ENGINE MULTI-CODEC -->
     <script src="https://cdn.jsdelivr.net/npm/ogv@1.8.9/dist/ogv.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #080b11; user-select: none; }
@@ -22,7 +22,7 @@
 </head>
 <body class="text-slate-100 antialiased overflow-hidden bg-[#080b11]">
 
-    <!-- 1. TELA DE GERENCIAMENTO DE LISTAS (PAINEL INICIAL) -->
+    <!-- 1. TELA DE GERENCIAMENTO DE LISTAS -->
     <div id="lists-manager-screen" class="flex flex-col items-center justify-center min-h-screen p-4 z-50 relative overflow-y-auto">
         <div class="text-center mb-8">
             <h2 class="text-4xl font-black bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">NEWTV</h2>
@@ -41,13 +41,13 @@
         <div class="bg-[#0f141c] p-6 rounded-2xl border border-slate-800/80 shadow-2xl w-full max-w-md">
             <h3 class="text-xl font-bold text-white mb-4">Adicionar Nova Lista</h3>
             <div class="space-y-4">
-                <input id="list-name" type="text" placeholder="Nome da Lista (ex: Sala, Filmes do Pai...)" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
+                <input id="list-name" type="text" placeholder="Nome da Lista (ex: Sala, Filmes...)" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <input id="dns" type="text" placeholder="URL do Servidor (ex: http://link.com:80)" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <input id="username" type="text" placeholder="Usuário" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <input id="password" type="password" placeholder="Senha" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <select id="cors-engine" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-slate-300 focus:outline-none focus:border-red-500">
-                    <option value="smart" selected>⚡ Desbloqueio CORS Inteligente + Proxy de Mídia</option>
-                    <option value="direct">Nenhum (Usar Extensão do Navegador)</option>
+                    <option value="proxy_premium" selected>🚀 Proxy Avançado (CORS Anywhere Bypass)</option>
+                    <option value="direct">Nenhum (Usar Extensão de Navegador no PC)</option>
                 </select>
                 <div class="flex space-x-3 pt-2">
                     <button onclick="closeAddListModal()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-3 rounded-xl text-xs font-bold transition">Cancelar</button>
@@ -250,8 +250,8 @@
                     listsCollection.push({ id: 'l_' + Date.now(), name, dns, user, pass, engine });
                     localStorage.setItem('sm_lists_collection', JSON.stringify(listsCollection));
                     closeAddListModal(); renderListsManager();
-                } else { alert('Acesso negado: Usuário ou senha incorretos.'); }
-            } catch(e) { alert('Erro de conexão. Se o problema persistir, use o modo "Direto" com extensão CORS ligada no navegador.'); }
+                } else { alert('Acesso negado: Dados incorretos no servidor.'); }
+            } catch(e) { alert('Erro de conexão. Certifique-se de usar URLs válidas.'); }
         }
 
         function removeList(event, id, name) {
@@ -365,25 +365,25 @@
             if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
         });
 
-        // MECANISMO MULTI-PROXY EVITA BLOQUEIOS HTTP / HTTPS
+        // NOVO MOTOR DE PROXY INTEGRADO E SUPORTE A SESSÃO CONTINUA
         async function fetchUnblockedWithEngine(url, engine) {
             if (engine === 'direct') {
                 const res = await fetch(url);
                 return await res.json();
             }
+            // Envelopamento com Cors-Anywhere Premium Fallback
             try {
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                const res = await fetch(proxyUrl);
-                if (!res.ok) throw new Error("Mudar proxy");
+                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+                const res = await fetch(proxyUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                 return await res.json();
             } catch (err) {
                 try {
-                    const fallbackProxy = `https://thingproxy.freeboard.io/fetch/${url}`;
-                    const res = await fetch(fallbackProxy);
+                    const altUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const res = await fetch(altUrl);
                     return await res.json();
                 } catch(e) {
-                    const finalProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-                    const res = await fetch(finalProxy);
+                    const lastUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+                    const res = await fetch(lastUrl);
                     return await res.json();
                 }
             }
@@ -393,12 +393,12 @@
             return await fetchUnblockedWithEngine(url, currentList.engine);
         }
 
-        // TRANSFORMA STREAMINGS EM LINKS COMPATÍVEIS COM HTTPS DINAMICAMENTE
+        // CORREÇÃO CRÍTICA: TRATAMENTO DE IMAGENS E MÍDIAS HTTP ATRAVÉS DO PROXY
         function aplicarProxyNoVideo(videoUrl) {
             if (!currentList || currentList.engine === 'direct') return videoUrl;
-            // Se o link já for HTTPS nativo, não mexe. Se for HTTP, envelopa no proxy de mídia seguro
             if (videoUrl.startsWith('https://')) return videoUrl;
-            return `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(videoUrl)}`;
+            // Força encapsulamento direto para evitar bloqueio "Mixed Content" do navegador
+            return `https://cors-anywhere.herokuapp.com/${videoUrl}`;
         }
 
         function switchTab(tab) {
@@ -414,7 +414,7 @@
                 categories = [{ category_id: "all_content", category_name: "✨ TODOS OS CONTEÚDOS" }].concat(data || []);
                 renderCategories();
             } catch (e) {
-                document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-red-500 text-xs">Erro de comunicação com o servidor IPTV. Certifique-se de que seus dados estão corretos ou tente mudar o modo da lista para Direto.</div>';
+                document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-red-500 text-xs">Erro de comunicação ou bloqueio de segurança no servidor IPTV.</div>';
             }
         }
 
@@ -451,14 +451,21 @@
                 const card = document.createElement('div');
                 card.className = "group bg-[#0f141c] border border-slate-800/60 rounded-xl p-2 cursor-pointer hover:border-red-500/40 transition-all overflow-hidden relative";
                 const name = item.name || "Sem título";
-                const img = item.stream_icon || item.cover || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=300';
+                
+                // Correção de Capas: se a imagem do servidor for HTTP, ela passa pelo proxy para renderizar no GitHub Pages
+                let origImg = item.stream_icon || item.cover || '';
+                let finalImg = 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=300';
+                if (origImg) {
+                    finalImg = origImg.startsWith('http://') ? aplicarProxyNoVideo(origImg) : origImg;
+                }
+
                 const id = item.stream_id || item.series_id;
                 let key = `${currentTab}_${id}`;
                 let progHtml = '';
                 if (currentTab === 'vod' && profileStorage.progress[key]) {
                     progHtml = `<div class="absolute bottom-0 left-0 right-0 h-[3px] bg-slate-800"><div class="h-full bg-red-600" style="width: ${profileStorage.progress[key].percent}%"></div></div>`;
                 }
-                card.innerHTML = `<div class="aspect-[2/3] w-full bg-[#080b11] rounded-lg overflow-hidden mb-2"><img src="${img}" class="w-full h-full object-cover" loading="lazy"></div><p class="text-[11px] font-semibold truncate text-slate-300 text-center">${name}</p>${progHtml}`;
+                card.innerHTML = `<div class="aspect-[2/3] w-full bg-[#080b11] rounded-lg overflow-hidden mb-2"><img src="${finalImg}" onerror="this.src='https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=300'" class="w-full h-full object-cover" loading="lazy"></div><p class="text-[11px] font-semibold truncate text-slate-300 text-center">${name}</p>${progHtml}`;
                 card.onclick = () => openCinema(item);
                 grid.appendChild(card);
             });
