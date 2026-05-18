@@ -47,7 +47,7 @@
                 <input id="password" type="password" placeholder="Senha" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-white focus:outline-none focus:border-red-500 transition">
                 <select id="cors-engine" class="w-full p-3 rounded-xl bg-[#161d28] border border-slate-800 text-sm text-slate-300 focus:outline-none focus:border-red-500">
                     <option value="smart" selected>⚡ Desbloqueio CORS Inteligente (Online)</option>
-                    <option value="direct">Nenhum (Conexão Direta)</option>
+                    <option value="direct">Nenhum (Usar Extensão do Navegador)</option>
                 </select>
                 <div class="flex space-x-3 pt-2">
                     <button onclick="closeAddListModal()" class="w-1/2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-3 rounded-xl text-xs font-bold transition">Cancelar</button>
@@ -242,16 +242,16 @@
             const user = document.getElementById('username').value.trim();
             const pass = document.getElementById('password').value.trim();
             const engine = document.getElementById('cors-engine').value;
-            if(!name || !dns || !user || !pass) return alert('Preencha tudo');
+            if(!name || !dns || !user || !pass) return alert('Preencha todos os campos.');
             try {
                 const testUrl = `${dns}/player_api.php?username=${user}&password=${pass}`;
-                let res = await fetchUnblockedWithEngine(testUrl, engine);
-                if (res && res.user_info && res.user_info.auth === 1) {
+                let data = await fetchUnblockedWithEngine(testUrl, engine);
+                if (data && data.user_info && data.user_info.auth === 1) {
                     listsCollection.push({ id: 'l_' + Date.now(), name, dns, user, pass, engine });
                     localStorage.setItem('sm_lists_collection', JSON.stringify(listsCollection));
                     closeAddListModal(); renderListsManager();
-                } else { alert('Acesso negado do Servidor.'); }
-            } catch(e) { alert('Erro de conexão ou trava de CORS ativa.'); }
+                } else { alert('Acesso negado: Usuário ou senha incorretos.'); }
+            } catch(e) { alert('Erro de conexão. Se o problema persistir, use o modo "Direto" com extensão CORS ligada no navegador.'); }
         }
 
         function removeList(event, id, name) {
@@ -365,25 +365,31 @@
             if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
         });
 
-        // CENTRAL DE DESBLOQUEIO CORS INTELIGENTE PARA AMBIENTE ONLINE (HTTPS)
+        // MECANISMO DE CORREÇÃO PARA AMBIENTE ONLINE (HTTPS -> PROXY HIBRIDO ATUALIZADO)
         async function fetchUnblockedWithEngine(url, engine) {
             if (engine === 'direct') {
-                return await (await fetch(url)).json();
-            }
-            // Modo Smart: Otimizado para ignorar travas de protocolo e CORS misto
-            try {
                 const res = await fetch(url);
                 return await res.json();
+            }
+            
+            // Modo Smart Dinâmico: Força o desvio do bloqueio de conteúdo misto (HTTP dentro de HTTPS)
+            try {
+                // Tentativa 1: Via proxy AllOrigins transparente estruturado de forma direta
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const res = await fetch(proxyUrl);
+                if (!res.ok) throw new Error("Fallback para motor alternativo");
+                return await res.json();
             } catch (err) {
-                // Fallback 1: Codetabs Proxy API (Mais rápido para JSONs puros em ambiente seguro)
+                // Tentativa 2: Via ThingProxy Gateway (Excelente para APIs JSON estruturadas de IPTV)
                 try {
-                    const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-                    return await (await fetch(proxyUrl)).json();
+                    const fallbackProxy = `https://thingproxy.freeboard.io/fetch/${url}`;
+                    const res = await fetch(fallbackProxy);
+                    return await res.json();
                 } catch(e) {
-                    // Fallback 2: AllOrigins estruturado como string pura para contingência final
-                    const backupUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                    const strRes = await (await fetch(backupUrl)).text();
-                    return JSON.parse(strRes);
+                    // Tentativa 3: Codetabs como contingência final de rede
+                    const finalProxy = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+                    const res = await fetch(finalProxy);
+                    return await res.json();
                 }
             }
         }
@@ -404,7 +410,9 @@
                 const data = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}`);
                 categories = [{ category_id: "all_content", category_name: "✨ TODOS OS CONTEÚDOS" }].concat(data || []);
                 renderCategories();
-            } catch (e) {}
+            } catch (e) {
+                document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-red-500 text-xs">Erro de comunicação com o servidor IPTV. Certifique-se de que seus dados estão corretos ou tente mudar o modo da lista para Direto.</div>';
+            }
         }
 
         function renderCategories() {
@@ -414,18 +422,24 @@
                 li.innerHTML = `<button onclick="selectCategory('${cat.category_id}')" class="w-full text-left px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-900 text-xs font-medium truncate">${cat.category_name}</button>`;
                 list.appendChild(li);
             });
+            // Auto-seleciona a primeira categoria por padrão para evitar tela em branco
+            if(categories.length > 0) selectCategory(categories[0].category_id);
         }
 
         async function selectCategory(id) {
-            document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 animate-pulse text-xs">Carregando...</div>';
+            document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-slate-500 animate-pulse text-xs">Buscando mídias do servidor...</div>';
             let act = currentTab === 'live' ? 'get_live_streams' : currentTab === 'vod' ? 'get_vod_streams' : 'get_series';
-            if (id === "all_content") {
-                if (!cachedStreams) cachedStreams = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}`) || [];
-                displayedItems = cachedStreams;
-            } else {
-                displayedItems = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}&category_id=${id}`) || [];
+            try {
+                if (id === "all_content") {
+                    if (!cachedStreams) cachedStreams = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}`) || [];
+                    displayedItems = cachedStreams;
+                } else {
+                    displayedItems = await fetchUnblocked(`${currentList.dns}/player_api.php?username=${currentList.user}&password=${currentList.pass}&action=${act}&category_id=${id}`) || [];
+                }
+                executeRender(displayedItems);
+            } catch(e) {
+                document.getElementById('content-grid').innerHTML = '<div class="col-span-full text-center py-20 text-slate-600 text-xs">Nenhum retorno recebido desta pasta.</div>';
             }
-            executeRender(displayedItems);
         }
 
         function executeRender(items) {
