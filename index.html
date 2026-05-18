@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NewTv Ultimate - Premium</title>
+    
+    <!-- TAGS PARA CONFIGURAÇÃO PWA -->
+    <meta name="theme-color" content="#080b11">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="icon-512.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
@@ -365,13 +373,11 @@
             if (e.key === "Escape") { if (!document.getElementById('cinema-container').classList.contains('hidden')) closeCinema(); }
         });
 
-        // NOVO MOTOR DE PROXY INTEGRADO E SUPORTE A SESSÃO CONTINUA
         async function fetchUnblockedWithEngine(url, engine) {
             if (engine === 'direct') {
                 const res = await fetch(url);
                 return await res.json();
             }
-            // Envelopamento com Cors-Anywhere Premium Fallback
             try {
                 const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
                 const res = await fetch(proxyUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
@@ -393,11 +399,9 @@
             return await fetchUnblockedWithEngine(url, currentList.engine);
         }
 
-        // CORREÇÃO CRÍTICA: TRATAMENTO DE IMAGENS E MÍDIAS HTTP ATRAVÉS DO PROXY
         function aplicarProxyNoVideo(videoUrl) {
             if (!currentList || currentList.engine === 'direct') return videoUrl;
             if (videoUrl.startsWith('https://')) return videoUrl;
-            // Força encapsulamento direto para evitar bloqueio "Mixed Content" do navegador
             return `https://cors-anywhere.herokuapp.com/${videoUrl}`;
         }
 
@@ -452,7 +456,6 @@
                 card.className = "group bg-[#0f141c] border border-slate-800/60 rounded-xl p-2 cursor-pointer hover:border-red-500/40 transition-all overflow-hidden relative";
                 const name = item.name || "Sem título";
                 
-                // Correção de Capas: se a imagem do servidor for HTTP, ela passa pelo proxy para renderizar no GitHub Pages
                 let origImg = item.stream_icon || item.cover || '';
                 let finalImg = 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?q=80&w=300';
                 if (origImg) {
@@ -649,6 +652,17 @@
             if (target === 'history') { profileStorage.live_history = []; profileStorage.vod_history = []; profileStorage.series_history = []; }
             else if (target === 'progress') { profileStorage.progress = {}; }
             saveProfileStorage(); toggleSettingsModal(); renderMediaHistory(); executeRender(displayedItems);
+        }
+    </script>
+
+    <!-- CRIAÇÃO AUTOMÁTICA E CONEXÃO DO INSTALADOR PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Instalador ativado com sucesso!', reg.scope))
+                .catch(err => console.log('Falha ao configurar instalador:', err));
+            });
         }
     </script>
 </body>
